@@ -21,7 +21,7 @@ import re
 import subprocess
 import time
 from collections import deque
-from contextlib import nullcontext, suppress
+from contextlib import suppress
 from typing import Any, Deque, Dict, List, Optional
 
 try:
@@ -434,9 +434,15 @@ class WebhookAdapter(BasePlatformAdapter):
 
     @staticmethod
     def _profile_scope(profile: Optional[str]):
-        """Runtime scope for a resolved ``/p/<profile>/`` prefix; bare routes get a no-op."""
+        """Runtime scope for a route: its ``/p/<profile>/`` prefix, or the DEFAULT profile for a bare route.
+
+        A bare route is served by the default profile (``_route_allows_profile`` compares against
+        ``request_profile or "default"``), so it must enter that profile's scope too. Without one, a
+        ``--script`` filter's ``build_subprocess_env()`` hits ``get_secret``'s fail-closed path under
+        the multiplexed gateway and raises ``UnscopedSecretError`` — every script filter dies. (#67277)
+        """
         if not profile or not isinstance(profile, str):
-            return nullcontext()
+            profile = "default"
         from gateway.run import _profile_runtime_scope
         from hermes_cli.profiles import get_profile_dir
         return _profile_runtime_scope(get_profile_dir(profile))
